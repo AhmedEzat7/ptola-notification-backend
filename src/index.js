@@ -944,10 +944,10 @@ async function handleSend(
     parseServiceAccount(env).project_id;
 
   const notificationPath =
-    `${firestoreBase(projectId)}` +
-    `/notifications/` +
-    `${encodeURIComponent(notificationId)}`;
-
+  `projects/${encodeURIComponent(projectId)}` +
+  `/databases/(default)/documents/notifications/` +
+  `${encodeURIComponent(notificationId)}`;
+  
   const notificationFields = {
     pushStatus:
       firestoreValue(
