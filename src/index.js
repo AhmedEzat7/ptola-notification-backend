@@ -379,49 +379,47 @@ async function getActiveDevices(env, uid) {
   const projectId =
     parseServiceAccount(env).project_id;
 
-  const parent =
-    `${firestoreBase(projectId)}` +
-    `/users/${encodeURIComponent(uid)}`;
-
   const token =
     await getGoogleAccessToken(
       env,
       FIRESTORE_SCOPE,
     );
 
+  const path =
+    `/users/${encodeURIComponent(uid)}/devices`;
+
   const response = await fetch(
-    `${parent}:runQuery`,
+    `${firestoreBase(projectId)}${path}?pageSize=100`,
     {
-      method: 'POST',
+      method: 'GET',
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        structuredQuery: {
-          from: [
-            {
-              collectionId: 'devices',
-            },
-          ],
-
-          where: {
-            fieldFilter: {
-              field: {
-                fieldPath: 'isActive',
-              },
-
-              op: 'EQUAL',
-
-              value: {
-                booleanValue: true,
-              },
-            },
-          },
-        },
-      }),
     },
   );
+
+  if (!response.ok) {
+    const text = await response.text();
+
+    throw new Error(
+      `Firestore devices list error (${response.status}): ${text}`,
+    );
+  }
+
+  const body = await response.json();
+
+  const documents =
+    body.documents || [];
+
+  return documents
+    .map(decodeFirestoreDocument)
+    .filter(
+      (doc) =>
+        doc.isActive === true &&
+        cleanString(doc.token),
+    );
+}
 
   if (!response.ok) {
     const text = await response.text();
