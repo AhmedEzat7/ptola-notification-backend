@@ -602,6 +602,12 @@ async function updateFirestoreDocuments(
   }
 }
 
+/*
+ * Build DATA-ONLY payload.
+ *
+ * The Flutter app is responsible for building
+ * the visible local notification.
+ */
 function buildData(
   notification,
 ) {
@@ -624,6 +630,13 @@ function buildData(
     target:
       cleanString(
         notification.target,
+      ),
+
+    style:
+      cleanString(
+        notification.style ||
+          notification.notificationStyle ||
+          'standard',
       ),
 
     matchId:
@@ -650,6 +663,22 @@ function buildData(
       cleanString(
         notification.imageUrl,
       ),
+
+    pushMode:
+      cleanString(
+        notification.pushMode ||
+          'user',
+      ),
+
+    dispatchId:
+      cleanString(
+        notification.dispatchId,
+      ),
+
+    saveToInbox:
+      notification.saveToInbox === false
+        ? 'false'
+        : 'true',
   };
 
   const extra =
@@ -673,7 +702,14 @@ function buildData(
         continue;
       }
 
-      data[`extra_${key}`] =
+      const safeKey =
+        String(key).trim();
+
+      if (!safeKey) {
+        continue;
+      }
+
+      data[`extra_${safeKey}`] =
         typeof value ===
         'string'
           ? value
@@ -686,6 +722,15 @@ function buildData(
   return data;
 }
 
+/*
+ * DATA-ONLY FCM.
+ *
+ * We intentionally DO NOT send the top-level
+ * "notification" object.
+ *
+ * The Flutter FCM service receives the data
+ * and creates the final local notification.
+ */
 async function sendFcmMessage(
   env,
   token,
@@ -704,18 +749,6 @@ async function sendFcmMessage(
   const message = {
     token,
 
-    notification: {
-      title:
-        cleanString(
-          notification.title,
-        ) || 'Ptola',
-
-      body:
-        cleanString(
-          notification.body,
-        ),
-    },
-
     data:
       buildData(
         notification,
@@ -724,28 +757,19 @@ async function sendFcmMessage(
     android: {
       priority:
         'HIGH',
-
-      notification: {
-        channel_id:
-          'ptola_notifications',
-
-        sound:
-          'default',
-
-        default_sound:
-          true,
-
-        default_vibrate_timings:
-          true,
-
-        notification_count:
-          1,
-      },
     },
 
     apns: {
+      headers: {
+        'apns-priority':
+          '10',
+      },
+
       payload: {
         aps: {
+          'content-available':
+            1,
+
           sound:
             'default',
         },
@@ -866,6 +890,22 @@ async function sendToRecipient(
     notificationType ===
     'match_reminder';
 
+  /*
+   * A non-reminder notification MUST have
+   * a tournamentId.
+   *
+   * This prevents accidental cross-tournament
+   * delivery.
+   */
+  if (
+    !isMatchReminder &&
+    !notificationTournamentId
+  ) {
+    throw new Error(
+      'tournamentId is required for non-reminder notifications.',
+    );
+  }
+
   const devices =
     await getActiveDevices(
       env,
@@ -902,7 +942,6 @@ async function sendToRecipient(
     eligibleDevices =
       uniqueDevices.filter(
         (device) =>
-          notificationTournamentId &&
           cleanString(
             device.activeTournamentId,
           ) ===
@@ -954,7 +993,9 @@ async function sendToRecipient(
 
                 body: {
                   error:
-                    error.message,
+                    error instanceof Error
+                      ? error.message
+                      : String(error),
                 },
               },
             };
