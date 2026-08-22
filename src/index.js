@@ -23,75 +23,24 @@ const FIREBASE_JWKS = createRemoteJWKSet(
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
 let cachedServiceAccount = null;
-let cachedProjectId = null;
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'content-type':
-        'application/json; charset=utf-8',
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        'content-type':
+          'application/json; charset=utf-8',
+      },
     },
-  });
+  );
 }
 
 function cleanString(value) {
   return value == null
     ? ''
     : String(value).trim();
-}
-
-function base64UrlEncode(input) {
-  const bytes =
-    input instanceof Uint8Array
-      ? input
-      : new TextEncoder().encode(input);
-
-  let binary = '';
-  const chunk = 0x8000;
-
-  for (
-    let i = 0;
-    i < bytes.length;
-    i += chunk
-  ) {
-    binary += String.fromCharCode(
-      ...bytes.subarray(i, i + chunk),
-    );
-  }
-
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-}
-
-function base64UrlDecode(value) {
-  const normalized = value
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const padded =
-    normalized +
-    '='.repeat(
-      (4 - (normalized.length % 4)) % 4,
-    );
-
-  const binary = atob(padded);
-  const bytes = new Uint8Array(
-    binary.length,
-  );
-
-  for (
-    let i = 0;
-    i < binary.length;
-    i++
-  ) {
-    bytes[i] =
-      binary.charCodeAt(i);
-  }
-
-  return bytes;
 }
 
 function parseServiceAccount(env) {
@@ -135,8 +84,6 @@ function parseServiceAccount(env) {
     );
 
   cachedServiceAccount = parsed;
-  cachedProjectId =
-    parsed.project_id;
 
   return parsed;
 }
@@ -152,9 +99,13 @@ async function createServiceAccountJwt(
     );
 
   const now =
-    Math.floor(Date.now() / 1000);
+    Math.floor(
+      Date.now() / 1000,
+    );
 
-  return new SignJWT({ scope })
+  return new SignJWT({
+    scope,
+  })
     .setProtectedHeader({
       alg: 'RS256',
       typ: 'JWT',
@@ -202,23 +153,26 @@ async function getGoogleAccessToken(
       scope,
     );
 
-  const response = await fetch(
-    GOOGLE_TOKEN_URL,
-    {
-      method: 'POST',
+  const response =
+    await fetch(
+      GOOGLE_TOKEN_URL,
+      {
+        method: 'POST',
 
-      headers: {
-        'content-type':
-          'application/x-www-form-urlencoded',
+        headers: {
+          'content-type':
+            'application/x-www-form-urlencoded',
+        },
+
+        body:
+          new URLSearchParams({
+            grant_type:
+              'urn:ietf:params:oauth:grant-type:jwt-bearer',
+
+            assertion,
+          }),
       },
-
-      body: new URLSearchParams({
-        grant_type:
-          'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion,
-      }),
-    },
-  );
+    );
 
   const body =
     await response
@@ -234,7 +188,9 @@ async function getGoogleAccessToken(
   cachedAccessToken = {
     value:
       body.access_token,
-    scope: cacheKey,
+
+    scope:
+      cacheKey,
   };
 
   cachedAccessTokenExpiresAt =
@@ -326,7 +282,8 @@ function firestoreValue(value) {
             String(value),
         }
       : {
-          doubleValue: value,
+          doubleValue:
+            value,
         };
   }
 
@@ -428,7 +385,8 @@ function decodeFirestoreDocument(
   document,
 ) {
   const out = {
-    name: document.name,
+    name:
+      document.name,
   };
 
   for (
@@ -512,17 +470,19 @@ async function getUser(
   );
 }
 
-/**
+/*
  * Get all active FCM devices
  * for a user.
  *
- * Firestore structure:
+ * Firestore:
  *
  * users/{uid}/devices/{deviceId}
  *
- * The REST API returns the
- * documents directly from this
- * collection.
+ * Important:
+ *
+ * activeTournamentId
+ * = البطولة المفتوحة حاليًا
+ *   على هذا الجهاز.
  */
 async function getActiveDevices(
   env,
@@ -580,7 +540,15 @@ async function getActiveDevices(
       (doc) =>
         doc.isActive === true &&
         cleanString(doc.token),
-    );
+    )
+    .map((doc) => ({
+      ...doc,
+
+      activeTournamentId:
+        cleanString(
+          doc.activeTournamentId,
+        ),
+    }));
 }
 
 async function updateFirestoreDocuments(
@@ -617,9 +585,10 @@ async function updateFirestoreDocuments(
             'application/json',
         },
 
-        body: JSON.stringify({
-          writes,
-        }),
+        body:
+          JSON.stringify({
+            writes,
+          }),
       },
     );
 
@@ -748,30 +717,37 @@ async function sendFcmMessage(
     },
 
     data:
-      buildData(notification),
+      buildData(
+        notification,
+      ),
 
     android: {
-      priority: 'HIGH',
+      priority:
+        'HIGH',
 
       notification: {
         channel_id:
           'ptola_notifications',
 
-        sound: 'default',
+        sound:
+          'default',
 
-        default_sound: true,
+        default_sound:
+          true,
 
         default_vibrate_timings:
           true,
 
-        notification_count: 1,
+        notification_count:
+          1,
       },
     },
 
     apns: {
       payload: {
         aps: {
-          sound: 'default',
+          sound:
+            'default',
         },
       },
     },
@@ -793,9 +769,10 @@ async function sendFcmMessage(
             'application/json; charset=UTF-8',
         },
 
-        body: JSON.stringify({
-          message,
-        }),
+        body:
+          JSON.stringify({
+            message,
+          }),
       },
     );
 
@@ -805,9 +782,12 @@ async function sendFcmMessage(
       .catch(() => ({}));
 
   return {
-    ok: response.ok,
+    ok:
+      response.ok,
+
     status:
       response.status,
+
     body,
   };
 }
@@ -841,6 +821,22 @@ function isInvalidFcmToken(
   );
 }
 
+/*
+ * Send notification to the
+ * correct devices.
+ *
+ * Rules:
+ *
+ * match_reminder:
+ *   Can reach the user regardless
+ *   of the currently opened
+ *   tournament.
+ *
+ * Everything else:
+ *   Can ONLY reach devices whose
+ *   activeTournamentId matches
+ *   notification.tournamentId.
+ */
 async function sendToRecipient(
   env,
   notification,
@@ -855,6 +851,20 @@ async function sendToRecipient(
       'recipientUid is required.',
     );
   }
+
+  const notificationType =
+    cleanString(
+      notification.type,
+    ).toLowerCase();
+
+  const notificationTournamentId =
+    cleanString(
+      notification.tournamentId,
+    );
+
+  const isMatchReminder =
+    notificationType ===
+    'match_reminder';
 
   const devices =
     await getActiveDevices(
@@ -873,19 +883,51 @@ async function sendToRecipient(
     ).values(),
   ];
 
+  let eligibleDevices;
+
+  if (isMatchReminder) {
+    /*
+     * Match reminder is the
+     * ONLY notification that can
+     * cross tournaments.
+     */
+    eligibleDevices =
+      uniqueDevices;
+  } else {
+    /*
+     * News / results / match
+     * updates / tournament alerts
+     * stay inside their tournament.
+     */
+    eligibleDevices =
+      uniqueDevices.filter(
+        (device) =>
+          notificationTournamentId &&
+          cleanString(
+            device.activeTournamentId,
+          ) ===
+            notificationTournamentId,
+      );
+  }
+
   if (
-    !uniqueDevices.length
+    !eligibleDevices.length
   ) {
     return {
-      successCount: 0,
-      failureCount: 0,
-      invalidDeviceIds: [],
+      successCount:
+        0,
+
+      failureCount:
+        0,
+
+      invalidDeviceIds:
+        [],
     };
   }
 
   const results =
     await Promise.all(
-      uniqueDevices.map(
+      eligibleDevices.map(
         async (device) => {
           try {
             const result =
@@ -904,8 +946,11 @@ async function sendToRecipient(
               device,
 
               result: {
-                ok: false,
-                status: 500,
+                ok:
+                  false,
+
+                status:
+                  500,
 
                 body: {
                   error:
@@ -920,7 +965,9 @@ async function sendToRecipient(
 
   const successCount =
     results.filter(
-      ({ result }) =>
+      ({
+        result,
+      }) =>
         result.ok,
     ).length;
 
@@ -930,7 +977,9 @@ async function sendToRecipient(
 
   const invalidDevices =
     results.filter(
-      ({ result }) =>
+      ({
+        result,
+      }) =>
         isInvalidFcmToken(
           result,
         ),
@@ -941,9 +990,12 @@ async function sendToRecipient(
   ) {
     const writes =
       invalidDevices.map(
-        ({ device }) => ({
+        ({
+          device,
+        }) => ({
           update: {
-            name: device.name,
+            name:
+              device.name,
 
             fields: {
               isActive: {
@@ -979,11 +1031,14 @@ async function sendToRecipient(
 
   return {
     successCount,
+
     failureCount,
 
     invalidDeviceIds:
       invalidDevices.map(
-        ({ device }) =>
+        ({
+          device,
+        }) =>
           device.name,
       ),
   };
@@ -1008,7 +1063,8 @@ async function authenticateAdmin(
         'Missing Firebase ID token.',
       );
 
-    error.statusCode = 401;
+    error.statusCode =
+      401;
 
     throw error;
   }
@@ -1026,7 +1082,8 @@ async function authenticateAdmin(
         'Empty Firebase ID token.',
       );
 
-    error.statusCode = 401;
+    error.statusCode =
+      401;
 
     throw error;
   }
@@ -1044,14 +1101,16 @@ async function authenticateAdmin(
     );
 
   if (
-    user.role !== 'admin'
+    user.role !==
+    'admin'
   ) {
     const error =
       new Error(
         'Admin access required.',
       );
 
-    error.statusCode = 403;
+    error.statusCode =
+      403;
 
     throw error;
   }
@@ -1086,7 +1145,9 @@ async function handleSend(
   ) {
     return json(
       {
-        ok: false,
+        ok:
+          false,
+
         error:
           'notification object is required.',
       },
@@ -1102,7 +1163,9 @@ async function handleSend(
   if (!notificationId) {
     return json(
       {
-        ok: false,
+        ok:
+          false,
+
         error:
           'notification.id is required.',
       },
@@ -1120,10 +1183,6 @@ async function handleSend(
     parseServiceAccount(env)
       .project_id;
 
-  // IMPORTANT:
-  // Firestore commit requires the
-  // full document resource name,
-  // NOT the REST URL.
   const notificationPath =
     `projects/${encodeURIComponent(projectId)}` +
     `/databases/(default)/documents/notifications/` +
@@ -1183,7 +1242,8 @@ async function handleSend(
   );
 
   return json({
-    ok: true,
+    ok:
+      true,
 
     notificationId,
 
@@ -1209,7 +1269,8 @@ export default {
           '/health'
       ) {
         return json({
-          ok: true,
+          ok:
+            true,
 
           service:
             'ptola-notification-backend',
@@ -1230,8 +1291,11 @@ export default {
 
       return json(
         {
-          ok: false,
-          error: 'Not found.',
+          ok:
+            false,
+
+          error:
+            'Not found.',
         },
         404,
       );
@@ -1245,7 +1309,8 @@ export default {
 
       return json(
         {
-          ok: false,
+          ok:
+            false,
 
           error:
             error?.message ||
@@ -1256,4 +1321,3 @@ export default {
     }
   },
 };
-
