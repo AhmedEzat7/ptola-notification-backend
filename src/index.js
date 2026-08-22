@@ -709,13 +709,26 @@ function buildData(
         continue;
       }
 
-      data[`extra_${safeKey}`] =
+            const serializedValue =
         typeof value ===
         'string'
           ? value
           : JSON.stringify(
               value,
             );
+
+      // Keep the original key so the
+      // Flutter notification service
+      // can read match/template data
+      // directly.
+      data[safeKey] =
+        serializedValue;
+
+      // Keep extra_ for backward
+      // compatibility with existing
+      // notification payload handling.
+      data[`extra_${safeKey}`] =
+        serializedValue;
     }
   }
 
