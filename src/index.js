@@ -1,8 +1,16 @@
-import { importPKCS8, SignJWT, createRemoteJWKSet, jwtVerify } from 'jose';
+import {
+  importPKCS8,
+  SignJWT,
+  createRemoteJWKSet,
+  jwtVerify,
+} from 'jose';
 
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_TOKEN_URL =
+  'https://oauth2.googleapis.com/token';
+
 const FIREBASE_MESSAGING_SCOPE =
   'https://www.googleapis.com/auth/firebase.messaging';
+
 const FIRESTORE_SCOPE =
   'https://www.googleapis.com/auth/datastore';
 
@@ -21,13 +29,16 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      'content-type': 'application/json; charset=utf-8',
+      'content-type':
+        'application/json; charset=utf-8',
     },
   });
 }
 
 function cleanString(value) {
-  return value == null ? '' : String(value).trim();
+  return value == null
+    ? ''
+    : String(value).trim();
 }
 
 function base64UrlEncode(input) {
@@ -39,7 +50,11 @@ function base64UrlEncode(input) {
   let binary = '';
   const chunk = 0x8000;
 
-  for (let i = 0; i < bytes.length; i += chunk) {
+  for (
+    let i = 0;
+    i < bytes.length;
+    i += chunk
+  ) {
     binary += String.fromCharCode(
       ...bytes.subarray(i, i + chunk),
     );
@@ -58,13 +73,22 @@ function base64UrlDecode(value) {
 
   const padded =
     normalized +
-    '='.repeat((4 - (normalized.length % 4)) % 4);
+    '='.repeat(
+      (4 - (normalized.length % 4)) % 4,
+    );
 
   const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
+  const bytes = new Uint8Array(
+    binary.length,
+  );
 
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  for (
+    let i = 0;
+    i < binary.length;
+    i++
+  ) {
+    bytes[i] =
+      binary.charCodeAt(i);
   }
 
   return bytes;
@@ -75,7 +99,8 @@ function parseServiceAccount(env) {
     return cachedServiceAccount;
   }
 
-  const raw = env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const raw =
+    env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
   if (!raw) {
     throw new Error(
@@ -103,70 +128,102 @@ function parseServiceAccount(env) {
     );
   }
 
-  parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+  parsed.private_key =
+    parsed.private_key.replace(
+      /\\n/g,
+      '\n',
+    );
 
   cachedServiceAccount = parsed;
-  cachedProjectId = parsed.project_id;
+  cachedProjectId =
+    parsed.project_id;
 
   return parsed;
 }
 
-async function createServiceAccountJwt(serviceAccount, scope) {
-  const privateKey = await importPKCS8(
-    serviceAccount.private_key,
-    'RS256',
-  );
+async function createServiceAccountJwt(
+  serviceAccount,
+  scope,
+) {
+  const privateKey =
+    await importPKCS8(
+      serviceAccount.private_key,
+      'RS256',
+    );
 
-  const now = Math.floor(Date.now() / 1000);
+  const now =
+    Math.floor(Date.now() / 1000);
 
   return new SignJWT({ scope })
     .setProtectedHeader({
       alg: 'RS256',
       typ: 'JWT',
     })
-    .setIssuer(serviceAccount.client_email)
-    .setSubject(serviceAccount.client_email)
-    .setAudience(GOOGLE_TOKEN_URL)
+    .setIssuer(
+      serviceAccount.client_email,
+    )
+    .setSubject(
+      serviceAccount.client_email,
+    )
+    .setAudience(
+      GOOGLE_TOKEN_URL,
+    )
     .setIssuedAt(now)
-    .setExpirationTime(now + 3600)
+    .setExpirationTime(
+      now + 3600,
+    )
     .sign(privateKey);
 }
 
-async function getGoogleAccessToken(env, scope) {
-  const serviceAccount = parseServiceAccount(env);
+async function getGoogleAccessToken(
+  env,
+  scope,
+) {
+  const serviceAccount =
+    parseServiceAccount(env);
 
   const cacheKey =
     `${serviceAccount.client_email}:${scope}`;
 
   if (
     cachedAccessToken &&
-    cachedAccessToken.scope === cacheKey &&
-    Date.now() < cachedAccessTokenExpiresAt - 60_000
+    cachedAccessToken.scope ===
+      cacheKey &&
+    Date.now() <
+      cachedAccessTokenExpiresAt -
+        60_000
   ) {
     return cachedAccessToken.value;
   }
 
-  const assertion = await createServiceAccountJwt(
-    serviceAccount,
-    scope,
+  const assertion =
+    await createServiceAccountJwt(
+      serviceAccount,
+      scope,
+    );
+
+  const response = await fetch(
+    GOOGLE_TOKEN_URL,
+    {
+      method: 'POST',
+
+      headers: {
+        'content-type':
+          'application/x-www-form-urlencoded',
+      },
+
+      body: new URLSearchParams({
+        grant_type:
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion,
+      }),
+    },
   );
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'content-type':
-        'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type:
-        'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-
-  const body = await response
-    .json()
-    .catch(() => ({}));
+  const body =
+    await response
+      .json()
+      .catch(() => ({}));
 
   if (!response.ok) {
     throw new Error(
@@ -175,34 +232,46 @@ async function getGoogleAccessToken(env, scope) {
   }
 
   cachedAccessToken = {
-    value: body.access_token,
+    value:
+      body.access_token,
     scope: cacheKey,
   };
 
   cachedAccessTokenExpiresAt =
     Date.now() +
-    Number(body.expires_in || 3600) * 1000;
+    Number(
+      body.expires_in || 3600,
+    ) *
+      1000;
 
   return body.access_token;
 }
 
-async function verifyFirebaseIdToken(env, idToken) {
+async function verifyFirebaseIdToken(
+  env,
+  idToken,
+) {
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
-  const { payload } = await jwtVerify(
-    idToken,
-    FIREBASE_JWKS,
-    {
-      issuer:
-        `https://securetoken.google.com/${projectId}`,
-      audience: projectId,
-    },
-  );
+  const { payload } =
+    await jwtVerify(
+      idToken,
+      FIREBASE_JWKS,
+      {
+        issuer:
+          `https://securetoken.google.com/${projectId}`,
+
+        audience:
+          projectId,
+      },
+    );
 
   if (
     !payload.sub ||
-    typeof payload.sub !== 'string'
+    typeof payload.sub !==
+      'string'
   ) {
     throw new Error(
       'Invalid Firebase ID token.',
@@ -222,75 +291,131 @@ function firestoreBase(projectId) {
 
 function firestoreValue(value) {
   if (value === null) {
-    return { nullValue: null };
+    return {
+      nullValue: null,
+    };
   }
 
-  if (typeof value === 'boolean') {
-    return { booleanValue: value };
+  if (
+    typeof value ===
+    'boolean'
+  ) {
+    return {
+      booleanValue: value,
+    };
   }
 
-  if (typeof value === 'string') {
-    return { stringValue: value };
+  if (
+    typeof value ===
+    'string'
+  ) {
+    return {
+      stringValue: value,
+    };
   }
 
-  if (typeof value === 'number') {
-    return Number.isInteger(value)
-      ? { integerValue: String(value) }
-      : { doubleValue: value };
+  if (
+    typeof value ===
+    'number'
+  ) {
+    return Number.isInteger(
+      value,
+    )
+      ? {
+          integerValue:
+            String(value),
+        }
+      : {
+          doubleValue: value,
+        };
   }
 
   return {
-    stringValue: JSON.stringify(value),
+    stringValue:
+      JSON.stringify(value),
   };
 }
 
-function decodeFirestoreValue(value) {
+function decodeFirestoreValue(
+  value,
+) {
   if (
     !value ||
-    typeof value !== 'object'
+    typeof value !==
+      'object'
   ) {
     return null;
   }
 
-  if ('stringValue' in value) {
+  if (
+    'stringValue' in value
+  ) {
     return value.stringValue;
   }
 
-  if ('booleanValue' in value) {
+  if (
+    'booleanValue' in value
+  ) {
     return value.booleanValue;
   }
 
-  if ('integerValue' in value) {
-    return Number(value.integerValue);
+  if (
+    'integerValue' in value
+  ) {
+    return Number(
+      value.integerValue,
+    );
   }
 
-  if ('doubleValue' in value) {
-    return Number(value.doubleValue);
+  if (
+    'doubleValue' in value
+  ) {
+    return Number(
+      value.doubleValue,
+    );
   }
 
-  if ('timestampValue' in value) {
+  if (
+    'timestampValue' in value
+  ) {
     return value.timestampValue;
   }
 
-  if ('nullValue' in value) {
+  if (
+    'nullValue' in value
+  ) {
     return null;
   }
 
-  if ('arrayValue' in value) {
+  if (
+    'arrayValue' in value
+  ) {
     return (
-      value.arrayValue.values || []
-    ).map(decodeFirestoreValue);
+      value.arrayValue.values ||
+      []
+    ).map(
+      decodeFirestoreValue,
+    );
   }
 
-  if ('mapValue' in value) {
+  if (
+    'mapValue' in value
+  ) {
     const out = {};
 
     for (
-      const [key, child] of Object.entries(
-        value.mapValue.fields || {},
+      const [
+        key,
+        child,
+      ] of Object.entries(
+        value.mapValue.fields ||
+          {},
       )
     ) {
-      out[key] = decodeFirestoreValue(child);
+      out[key] =
+        decodeFirestoreValue(
+          child,
+        );
     }
 
     return out;
@@ -299,17 +424,25 @@ function decodeFirestoreValue(value) {
   return null;
 }
 
-function decodeFirestoreDocument(document) {
+function decodeFirestoreDocument(
+  document,
+) {
   const out = {
     name: document.name,
   };
 
   for (
-    const [key, value] of Object.entries(
+    const [
+      key,
+      value,
+    ] of Object.entries(
       document.fields || {},
     )
   ) {
-    out[key] = decodeFirestoreValue(value);
+    out[key] =
+      decodeFirestoreValue(
+        value,
+      );
   }
 
   return out;
@@ -321,7 +454,8 @@ async function firestoreRequest(
   options = {},
 ) {
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
   const token =
     await getGoogleAccessToken(
@@ -329,20 +463,28 @@ async function firestoreRequest(
       FIRESTORE_SCOPE,
     );
 
-  const response = await fetch(
-    `${firestoreBase(projectId)}${path}`,
-    {
-      ...options,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        ...(options.headers || {}),
+  const response =
+    await fetch(
+      `${firestoreBase(projectId)}${path}`,
+      {
+        ...options,
+
+        headers: {
+          authorization:
+            `Bearer ${token}`,
+
+          'content-type':
+            'application/json',
+
+          ...(options.headers ||
+            {}),
+        },
       },
-    },
-  );
+    );
 
   if (!response.ok) {
-    const text = await response.text();
+    const text =
+      await response.text();
 
     throw new Error(
       `Firestore error (${response.status}): ${text}`,
@@ -352,7 +494,10 @@ async function firestoreRequest(
   return response;
 }
 
-async function getUser(env, uid) {
+async function getUser(
+  env,
+  uid,
+) {
   const response =
     await firestoreRequest(
       env,
@@ -368,16 +513,24 @@ async function getUser(env, uid) {
 }
 
 /**
- * Get all active FCM devices for a user.
+ * Get all active FCM devices
+ * for a user.
  *
- * IMPORTANT:
- * Firestore REST runQuery can return
- * newline-delimited JSON instead of a
- * normal JSON array.
+ * Firestore structure:
+ *
+ * users/{uid}/devices/{deviceId}
+ *
+ * The REST API returns the
+ * documents directly from this
+ * collection.
  */
-async function getActiveDevices(env, uid) {
+async function getActiveDevices(
+  env,
+  uid,
+) {
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
   const token =
     await getGoogleAccessToken(
@@ -388,77 +541,45 @@ async function getActiveDevices(env, uid) {
   const path =
     `/users/${encodeURIComponent(uid)}/devices`;
 
-  const response = await fetch(
-    `${firestoreBase(projectId)}${path}?pageSize=100`,
-    {
-      method: 'GET',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
+  const response =
+    await fetch(
+      `${firestoreBase(projectId)}${path}?pageSize=100`,
+      {
+        method: 'GET',
+
+        headers: {
+          authorization:
+            `Bearer ${token}`,
+
+          'content-type':
+            'application/json',
+        },
       },
-    },
-  );
+    );
 
   if (!response.ok) {
-    const text = await response.text();
+    const text =
+      await response.text();
 
     throw new Error(
       `Firestore devices list error (${response.status}): ${text}`,
     );
   }
 
-  const body = await response.json();
+  const body =
+    await response.json();
 
   const documents =
     body.documents || [];
 
   return documents
-    .map(decodeFirestoreDocument)
+    .map(
+      decodeFirestoreDocument,
+    )
     .filter(
       (doc) =>
         doc.isActive === true &&
         cleanString(doc.token),
-    );
-}
-
-  if (!response.ok) {
-    const text = await response.text();
-
-    throw new Error(
-      `Firestore devices query error (${response.status}): ${text}`,
-    );
-  }
-
-  // ------------------------------------------------------------
-  // FIX:
-  // Firestore runQuery may return newline-delimited JSON.
-  // Do NOT use response.json() here.
-  // ------------------------------------------------------------
-
-  const text = await response.text();
-
-  const rows = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-
-  return rows
-    .filter((row) => row.document)
-    .map((row) =>
-      decodeFirestoreDocument(
-        row.document,
-      ),
-    )
-    .filter((doc) =>
-      cleanString(doc.token),
     );
 }
 
@@ -471,7 +592,8 @@ async function updateFirestoreDocuments(
   }
 
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
   const token =
     await getGoogleAccessToken(
@@ -479,24 +601,31 @@ async function updateFirestoreDocuments(
       FIRESTORE_SCOPE,
     );
 
-  const response = await fetch(
-    `https://firestore.googleapis.com/v1/projects/` +
-      `${encodeURIComponent(projectId)}` +
-      `/databases/(default)/documents:commit`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
+  const response =
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/` +
+        `${encodeURIComponent(projectId)}` +
+        `/databases/(default)/documents:commit`,
+      {
+        method: 'POST',
+
+        headers: {
+          authorization:
+            `Bearer ${token}`,
+
+          'content-type':
+            'application/json',
+        },
+
+        body: JSON.stringify({
+          writes,
+        }),
       },
-      body: JSON.stringify({
-        writes,
-      }),
-    },
-  );
+    );
 
   if (!response.ok) {
-    const text = await response.text();
+    const text =
+      await response.text();
 
     throw new Error(
       `Firestore commit error (${response.status}): ${text}`,
@@ -504,34 +633,54 @@ async function updateFirestoreDocuments(
   }
 }
 
-function buildData(notification) {
+function buildData(
+  notification,
+) {
   const data = {
     notificationId:
-      cleanString(notification.id),
+      cleanString(
+        notification.id,
+      ),
 
     tournamentId:
-      cleanString(notification.tournamentId),
+      cleanString(
+        notification.tournamentId,
+      ),
 
     type:
-      cleanString(notification.type),
+      cleanString(
+        notification.type,
+      ),
 
     target:
-      cleanString(notification.target),
+      cleanString(
+        notification.target,
+      ),
 
     matchId:
-      cleanString(notification.matchId),
+      cleanString(
+        notification.matchId,
+      ),
 
     round:
-      cleanString(notification.round),
+      cleanString(
+        notification.round,
+      ),
 
     title:
-      cleanString(notification.title),
+      cleanString(
+        notification.title,
+      ),
 
     body:
-      cleanString(notification.body),
+      cleanString(
+        notification.body,
+      ),
 
     imageUrl:
-      cleanString(notification.imageUrl),
+      cleanString(
+        notification.imageUrl,
+      ),
   };
 
   const extra =
@@ -539,11 +688,15 @@ function buildData(notification) {
 
   if (
     extra &&
-    typeof extra === 'object' &&
+    typeof extra ===
+      'object' &&
     !Array.isArray(extra)
   ) {
     for (
-      const [key, value] of Object.entries(
+      const [
+        key,
+        value,
+      ] of Object.entries(
         extra,
       )
     ) {
@@ -552,9 +705,12 @@ function buildData(notification) {
       }
 
       data[`extra_${key}`] =
-        typeof value === 'string'
+        typeof value ===
+        'string'
           ? value
-          : JSON.stringify(value);
+          : JSON.stringify(
+              value,
+            );
     }
   }
 
@@ -567,7 +723,8 @@ async function sendFcmMessage(
   notification,
 ) {
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
   const accessToken =
     await getGoogleAccessToken(
@@ -580,11 +737,14 @@ async function sendFcmMessage(
 
     notification: {
       title:
-        cleanString(notification.title) ||
-        'Ptola',
+        cleanString(
+          notification.title,
+        ) || 'Ptola',
 
       body:
-        cleanString(notification.body),
+        cleanString(
+          notification.body,
+        ),
     },
 
     data:
@@ -601,7 +761,8 @@ async function sendFcmMessage(
 
         default_sound: true,
 
-        default_vibrate_timings: true,
+        default_vibrate_timings:
+          true,
 
         notification_count: 1,
       },
@@ -616,26 +777,27 @@ async function sendFcmMessage(
     },
   };
 
-  const response = await fetch(
-    `https://fcm.googleapis.com/v1/projects/` +
-      `${encodeURIComponent(projectId)}` +
-      `/messages:send`,
-    {
-      method: 'POST',
+  const response =
+    await fetch(
+      `https://fcm.googleapis.com/v1/projects/` +
+        `${encodeURIComponent(projectId)}` +
+        `/messages:send`,
+      {
+        method: 'POST',
 
-      headers: {
-        authorization:
-          `Bearer ${accessToken}`,
+        headers: {
+          authorization:
+            `Bearer ${accessToken}`,
 
-        'content-type':
-          'application/json; charset=UTF-8',
+          'content-type':
+            'application/json; charset=UTF-8',
+        },
+
+        body: JSON.stringify({
+          message,
+        }),
       },
-
-      body: JSON.stringify({
-        message,
-      }),
-    },
-  );
+    );
 
   const body =
     await response
@@ -644,12 +806,15 @@ async function sendFcmMessage(
 
   return {
     ok: response.ok,
-    status: response.status,
+    status:
+      response.status,
     body,
   };
 }
 
-function isInvalidFcmToken(result) {
+function isInvalidFcmToken(
+  result,
+) {
   if (
     !result ||
     result.ok
@@ -699,14 +864,18 @@ async function sendToRecipient(
 
   const uniqueDevices = [
     ...new Map(
-      devices.map((device) => [
-        device.token,
-        device,
-      ]),
+      devices.map(
+        (device) => [
+          device.token,
+          device,
+        ],
+      ),
     ).values(),
   ];
 
-  if (!uniqueDevices.length) {
+  if (
+    !uniqueDevices.length
+  ) {
     return {
       successCount: 0,
       failureCount: 0,
@@ -751,7 +920,8 @@ async function sendToRecipient(
 
   const successCount =
     results.filter(
-      ({ result }) => result.ok,
+      ({ result }) =>
+        result.ok,
     ).length;
 
   const failureCount =
@@ -761,7 +931,9 @@ async function sendToRecipient(
   const invalidDevices =
     results.filter(
       ({ result }) =>
-        isInvalidFcmToken(result),
+        isInvalidFcmToken(
+          result,
+        ),
     );
 
   if (
@@ -775,7 +947,8 @@ async function sendToRecipient(
 
             fields: {
               isActive: {
-                booleanValue: false,
+                booleanValue:
+                  false,
               },
             },
           },
@@ -842,7 +1015,9 @@ async function authenticateAdmin(
 
   const idToken =
     header
-      .slice('Bearer '.length)
+      .slice(
+        'Bearer '.length,
+      )
       .trim();
 
   if (!idToken) {
@@ -903,8 +1078,11 @@ async function handleSend(
 
   if (
     !notification ||
-    typeof notification !== 'object' ||
-    Array.isArray(notification)
+    typeof notification !==
+      'object' ||
+    Array.isArray(
+      notification,
+    )
   ) {
     return json(
       {
@@ -939,13 +1117,18 @@ async function handleSend(
     );
 
   const projectId =
-    parseServiceAccount(env).project_id;
+    parseServiceAccount(env)
+      .project_id;
 
+  // IMPORTANT:
+  // Firestore commit requires the
+  // full document resource name,
+  // NOT the REST URL.
   const notificationPath =
-  `projects/${encodeURIComponent(projectId)}` +
-  `/databases/(default)/documents/notifications/` +
-  `${encodeURIComponent(notificationId)}`;
-  
+    `projects/${encodeURIComponent(projectId)}` +
+    `/databases/(default)/documents/notifications/` +
+    `${encodeURIComponent(notificationId)}`;
+
   const notificationFields = {
     pushStatus:
       firestoreValue(
@@ -1020,18 +1203,22 @@ export default {
         );
 
       if (
-        request.method === 'GET' &&
-        url.pathname === '/health'
+        request.method ===
+          'GET' &&
+        url.pathname ===
+          '/health'
       ) {
         return json({
           ok: true,
+
           service:
             'ptola-notification-backend',
         });
       }
 
       if (
-        request.method === 'POST' &&
+        request.method ===
+          'POST' &&
         url.pathname ===
           '/v1/notifications/send'
       ) {
